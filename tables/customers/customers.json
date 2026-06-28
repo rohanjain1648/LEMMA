@@ -1,0 +1,17 @@
+{
+  "name": "customers",
+  "primary_key_column": "id",
+  "enable_rls": false,
+  "visibility": "POD",
+  "columns": [
+    { "name": "email",        "type": "TEXT",    "required": true,  "max_length": 320 },
+    { "name": "name",         "type": "TEXT",    "required": false, "max_length": 200 },
+    { "name": "company",      "type": "TEXT",    "required": false, "max_length": 200 },
+    { "name": "tier",         "type": "ENUM",    "required": true,  "default": "free",
+      "options": ["free", "starter", "pro", "enterprise"] },
+    { "name": "ticket_count", "type": "INTEGER", "required": false, "default": 0 },
+    { "name": "notes",        "type": "TEXT",    "required": false },
+    { "name": "is_active",    "type": "BOOLEAN", "required": false, "default": true }
+  ],
+  "config": {}
+}

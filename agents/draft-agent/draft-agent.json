@@ -1,0 +1,15 @@
+{
+  "name": "draft-agent",
+  "description": "Searches the knowledge base for relevant articles, then writes a grounded response draft for a triaged support ticket. Sets confidence_score and draft_response on the ticket.",
+  "instruction": { "$file": "instruction.md" },
+  "toolsets": ["POD"],
+  "visibility": "POD",
+  "permissions": { "grants": [
+    { "resource_type": "datastore_table", "resource_name": "tickets",
+      "permission_ids": ["datastore.table.read", "datastore.record.read", "datastore.record.write"] },
+    { "resource_type": "datastore_table", "resource_name": "knowledge_base",
+      "permission_ids": ["datastore.table.read", "datastore.record.read", "datastore.record.write"] },
+    { "resource_type": "datastore_table", "resource_name": "responses",
+      "permission_ids": ["datastore.table.read", "datastore.record.read", "datastore.record.write"] }
+  ] }
+}

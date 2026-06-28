@@ -1,0 +1,16 @@
+{
+  "name": "knowledge_base",
+  "primary_key_column": "id",
+  "enable_rls": false,
+  "visibility": "POD",
+  "columns": [
+    { "name": "title",       "type": "TEXT",    "required": true,  "max_length": 300 },
+    { "name": "content",     "type": "TEXT",    "required": true },
+    { "name": "category",    "type": "ENUM",    "required": true,
+      "options": ["billing", "bug", "how_to", "feature_request", "account", "general"] },
+    { "name": "tags",        "type": "JSON",    "required": false },
+    { "name": "usage_count", "type": "INTEGER", "required": false, "default": 0 },
+    { "name": "is_active",   "type": "BOOLEAN", "required": true,  "default": true }
+  ],
+  "config": {}
+}

@@ -1,0 +1,5 @@
+{
+  "path": "/knowledge",
+  "description": "Supplementary knowledge documents for agent RAG search. Markdown files about product features, FAQs, and troubleshooting guides.",
+  "visibility": "POD"
+}

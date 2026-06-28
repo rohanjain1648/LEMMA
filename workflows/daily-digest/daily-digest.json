@@ -1,0 +1,16 @@
+{
+  "name": "daily-digest",
+  "description": "Runs daily at 8 AM. analytics-agent queries the past 7 days of tickets and writes a structured digest report to /reports.",
+  "start": { "type": "SCHEDULED", "config": { "schedule_type": "CRON", "cron": "0 8 * * *" } },
+  "nodes": [
+    { "id": "analyze", "type": "AGENT", "label": "Generate Daily Digest",
+      "config": {
+        "agent_name": "analytics-agent",
+        "input_mapping": {} } },
+    { "id": "end", "type": "END", "label": "Done" }
+  ],
+  "edges": [
+    { "id": "e1", "source": "analyze", "target": "end" }
+  ],
+  "visibility": "POD"
+}

@@ -1,0 +1,31 @@
+{
+  // Shared team table — all support team members see all tickets
+  "name": "tickets",
+  "primary_key_column": "id",
+  "enable_rls": false,
+  "visibility": "POD",
+  "columns": [
+    { "name": "subject",        "type": "TEXT",     "required": true, "max_length": 500 },
+    { "name": "body",           "type": "TEXT",     "required": true },
+    { "name": "customer_email", "type": "TEXT",     "required": true, "max_length": 320 },
+    { "name": "customer_name",  "type": "TEXT",     "required": false, "max_length": 200 },
+    { "name": "source",         "type": "ENUM",     "required": true, "default": "web",
+      "options": ["email", "web", "slack", "api"] },
+    { "name": "status",         "type": "ENUM",     "required": true, "default": "new",
+      "options": ["new", "triaged", "draft_ready", "pending_review", "approved", "sent", "resolved", "closed"] },
+    { "name": "category",       "type": "ENUM",     "required": false,
+      "options": ["billing", "bug", "how_to", "feature_request", "account", "other"] },
+    { "name": "priority",       "type": "ENUM",     "required": false, "default": "medium",
+      "options": ["low", "medium", "high", "urgent"] },
+    { "name": "sentiment",      "type": "ENUM",     "required": false,
+      "options": ["positive", "neutral", "frustrated", "angry"] },
+    { "name": "confidence_score", "type": "FLOAT",  "required": false },
+    { "name": "draft_response", "type": "TEXT",     "required": false },
+    { "name": "final_response", "type": "TEXT",     "required": false },
+    { "name": "kb_articles_used", "type": "JSON",   "required": false },
+    { "name": "auto_sent",      "type": "BOOLEAN",  "required": false, "default": false },
+    { "name": "resolved_at",    "type": "DATETIME", "required": false },
+    { "name": "assignee_user_id", "type": "USER",   "required": false }
+  ],
+  "config": {}
+}

@@ -1,0 +1,71 @@
+{
+  "name": "ticket-intake",
+  "description": "End-to-end ticket processing: intake form → triage → draft → escalation decision → human review (if needed) → done.",
+  "start": { "type": "MANUAL" },
+  "nodes": [
+    // Step 1: Collect the incoming ticket
+    { "id": "intake", "type": "FORM", "label": "New Ticket",
+      "config": { "input_schema": {
+        "type": "object",
+        "properties": {
+          "subject":        { "type": "string", "title": "Subject" },
+          "body":           { "type": "string", "title": "Message body" },
+          "customer_email": { "type": "string", "title": "Customer email" },
+          "customer_name":  { "type": "string", "title": "Customer name (optional)" },
+          "source":         { "type": "string", "title": "Source", "enum": ["email","web","slack","api"], "default": "web" }
+        },
+        "required": ["subject", "body", "customer_email"] } } },
+
+    // Step 2: Classify the ticket
+    { "id": "triage", "type": "AGENT", "label": "Triage",
+      "config": {
+        "agent_name": "triage-agent",
+        "input_mapping": {
+          "ticket_id":      { "type": "expression", "value": "intake.ticket_id" },
+          "subject":        { "type": "expression", "value": "intake.subject" },
+          "body":           { "type": "expression", "value": "intake.body" },
+          "customer_email": { "type": "expression", "value": "intake.customer_email" },
+          "customer_name":  { "type": "expression", "value": "intake.customer_name" }
+        } } },
+
+    // Step 3: Draft a response
+    { "id": "draft", "type": "AGENT", "label": "Draft Response",
+      "config": {
+        "agent_name": "draft-agent",
+        "input_mapping": {
+          "ticket_id": { "type": "expression", "value": "intake.ticket_id" }
+        } } },
+
+    // Step 4: Decide whether to auto-send or route to human
+    { "id": "escalate", "type": "AGENT", "label": "Escalation Check",
+      "config": {
+        "agent_name": "escalation-agent",
+        "input_mapping": {
+          "ticket_id": { "type": "expression", "value": "intake.ticket_id" }
+        } } },
+
+    // Step 5a: Human review (only reached when escalation-agent sets pending_review)
+    { "id": "human-review", "type": "WAIT_UNTIL", "label": "Awaiting Human Review",
+      "config": {
+        "condition": {
+          "type": "datastore_field",
+          "table": "tickets",
+          "record_id_expression": "intake.ticket_id",
+          "field": "status",
+          "operator": "in",
+          "value": ["approved", "closed"]
+        },
+        "timeout_seconds": 172800   // 48-hour timeout
+      } },
+
+    { "id": "end", "type": "END", "label": "Done" }
+  ],
+  "edges": [
+    { "id": "e1", "source": "intake",       "target": "triage" },
+    { "id": "e2", "source": "triage",       "target": "draft" },
+    { "id": "e3", "source": "draft",        "target": "escalate" },
+    { "id": "e4", "source": "escalate",     "target": "human-review" },
+    { "id": "e5", "source": "human-review", "target": "end" }
+  ],
+  "visibility": "POD"
+}
