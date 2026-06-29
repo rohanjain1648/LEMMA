@@ -1,0 +1,20 @@
+{
+  "name": "email-intake",
+  "description": "Inbound email channel. Fires on a Gmail new-message connector event; a function files a ticket (source=email) silently — NO auto-reply to the sender. The ticket then flows through the autonomous ticket-pipeline like any other channel.",
+  "start": { "type": "EVENT", "config": { "connector_trigger_id": "gmail:composio:gmail_new_gmail_message", "connector_id": "gmail" } },
+  "nodes": [
+    { "id": "file-ticket", "type": "FUNCTION", "label": "File email as ticket",
+      "config": {
+        "function_name": "intake_email",
+        "input_mapping": {
+          "sender":       { "type": "expression", "value": "start.payload.sender", "optional": true },
+          "subject":      { "type": "expression", "value": "start.payload.subject", "optional": true },
+          "message_text": { "type": "expression", "value": "start.payload.message_text", "optional": true }
+        } } },
+    { "id": "end", "type": "END", "label": "Done" }
+  ],
+  "edges": [
+    { "id": "e1", "source": "file-ticket", "target": "end" }
+  ],
+  "visibility": "POD"
+}

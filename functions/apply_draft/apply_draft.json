@@ -1,0 +1,13 @@
+{
+  "name": "apply_draft",
+  "description": "Deterministically writes the draft-agent's grounded response and confidence score onto the ticket (status=draft_ready) and logs a row in the responses audit table.",
+  "type": "API",
+  "visibility": "POD",
+  "code": { "$file": "code.py" },
+  "permissions": { "grants": [
+    { "resource_type": "datastore_table", "resource_name": "tickets",
+      "permission_ids": ["datastore.table.read", "datastore.record.read", "datastore.record.write"] },
+    { "resource_type": "datastore_table", "resource_name": "responses",
+      "permission_ids": ["datastore.table.read", "datastore.record.read", "datastore.record.write"] }
+  ] }
+}

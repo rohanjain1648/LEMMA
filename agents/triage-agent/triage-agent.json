@@ -1,13 +1,21 @@
 {
   "name": "triage-agent",
-  "description": "Reads incoming support tickets and classifies them: category, priority, sentiment. Updates the ticket record and upserts the customer profile.",
+  "description": "Reads an incoming support ticket and classifies it: category, priority, sentiment. Returns a structured judgment; a deterministic function persists it.",
   "instruction": { "$file": "instruction.md" },
   "toolsets": ["POD"],
   "visibility": "POD",
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "category":      { "type": "string", "enum": ["billing", "bug", "how_to", "feature_request", "account", "other"] },
+      "priority":      { "type": "string", "enum": ["urgent", "high", "medium", "low"] },
+      "sentiment":     { "type": "string", "enum": ["angry", "frustrated", "neutral", "positive"] },
+      "customer_name": { "type": "string", "description": "Customer's name if derivable from the message/signature; else empty." }
+    },
+    "required": ["category", "priority", "sentiment"]
+  },
   "permissions": { "grants": [
     { "resource_type": "datastore_table", "resource_name": "tickets",
-      "permission_ids": ["datastore.table.read", "datastore.record.read", "datastore.record.write"] },
-    { "resource_type": "datastore_table", "resource_name": "customers",
-      "permission_ids": ["datastore.table.read", "datastore.record.read", "datastore.record.write"] }
+      "permission_ids": ["datastore.table.read", "datastore.record.read"] }
   ] }
 }

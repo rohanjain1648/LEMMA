@@ -5,7 +5,6 @@ import {
   useRecords,
   useCreateRecord,
   useUpdateRecord,
-  useWorkflowStart,
   useFiles,
   useFilePreview,
 } from 'lemma-sdk/react'
@@ -115,6 +114,18 @@ function ConfidencePill({ score }: { score?: number }) {
   return <span className={`text-sm font-mono ${cls}`}>{pct}%</span>
 }
 
+const CHANNELS: Record<string, { label: string; icon: string }> = {
+  email: { label: 'Email', icon: '✉️' },
+  slack: { label: 'Slack', icon: '💬' },
+  web: { label: 'Web', icon: '🌐' },
+  api: { label: 'API', icon: '🔌' },
+}
+
+function ChannelBadge({ source }: { source?: string }) {
+  const c = CHANNELS[source ?? 'web'] ?? { label: source ?? '—', icon: '🌐' }
+  return <span className="badge badge-channel" title={`Arrived via ${c.label}`}>{c.icon} {c.label}</span>
+}
+
 function timeAgo(iso: string) {
   const diff = Date.now() - new Date(iso).getTime()
   const mins = Math.floor(diff / 60000)
@@ -132,12 +143,6 @@ function NewTicketModal({ onClose }: { onClose: () => void }) {
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { start, isStarting } = useWorkflowStart({
-    client: lemmaClient,
-    workflowName: 'ticket-intake',
-    onError: (e) => setError(e instanceof Error ? e.message : String(e)),
-  })
-
   const { create } = useCreateRecord<Ticket>({ client: lemmaClient, tableName: 'tickets' })
 
   async function submit(e: React.FormEvent) {
@@ -146,10 +151,10 @@ function NewTicketModal({ onClose }: { onClose: () => void }) {
     setRunning(true)
     setError(null)
     try {
-      // Create ticket record first so triage-agent can update it
-      const ticket = await create({ ...form, status: 'new' })
-      // Start the workflow with the ticket context
-      await start({ ...form, ticket_id: ticket?.id ?? '' })
+      // Just create the ticket row. The "ticket-insert-pipeline" datastore
+      // schedule fires on INSERT and auto-runs triage → draft → escalation —
+      // the same path every channel (web, email, Slack, API) flows through.
+      await create({ ...form, status: 'new' })
       setDone(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -158,7 +163,7 @@ function NewTicketModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const busy = running || isStarting
+  const busy = running
 
   return (
     <div
@@ -174,7 +179,7 @@ function NewTicketModal({ onClose }: { onClose: () => void }) {
         {done ? (
           <div>
             <div className="alert-success" style={{ marginBottom: 16 }}>
-              ✓ Ticket created and intake workflow started. AI agents are now triaging and drafting a response.
+              ✓ Ticket created. The auto-triage pipeline picked it up — agents are classifying, searching the KB, and drafting a response now.
             </div>
             <button className="btn btn-primary" onClick={onClose}>Close</button>
           </div>
@@ -210,7 +215,7 @@ function NewTicketModal({ onClose }: { onClose: () => void }) {
             {error && <div className="alert" style={{ marginBottom: 12 }}>{error}</div>}
             <div className="gap-8">
               <button className="btn btn-primary" type="submit" disabled={busy}>
-                {busy ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Starting...</> : <><Zap size={14} /> Submit & Auto-Triage</>}
+                {busy ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Creating...</> : <><Zap size={14} /> Submit & Auto-Triage</>}
               </button>
               <button className="btn btn-outline" type="button" onClick={onClose}>Cancel</button>
             </div>
@@ -413,6 +418,12 @@ function DashboardView({ tickets, setView }: { tickets: Ticket[]; setView: (v: V
 
   const topCategories = Object.entries(byCategory).sort((a, b) => b[1] - a[1]).slice(0, 5)
 
+  const byChannel = tickets.reduce<Record<string, number>>((acc, t) => {
+    const k = t.source ?? 'web'
+    acc[k] = (acc[k] ?? 0) + 1
+    return acc
+  }, {})
+
   const recent = [...tickets].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5)
 
   return (
@@ -437,6 +448,20 @@ function DashboardView({ tickets, setView }: { tickets: Ticket[]; setView: (v: V
           <div className="metric-label">Avg AI Confidence</div>
           <div className="metric-value">{avgConf > 0 ? `${Math.round(avgConf * 100)}%` : '—'}</div>
           <div className="metric-sub">Draft quality signal</div>
+        </div>
+      </div>
+
+      <div className="panel" style={{ marginBottom: 20 }}>
+        <div className="section-head-title" style={{ marginBottom: 12 }}>
+          <MessageSquare size={15} /> Channels &nbsp;<span className="text-xs text-muted" style={{ fontWeight: 400 }}>every source flows into one auto-triage pipeline</span>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          {Object.keys(CHANNELS).map(src => (
+            <div key={src} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', border: '1px solid var(--line)', borderRadius: 8 }}>
+              <ChannelBadge source={src} />
+              <span className="font-mono text-sm">{byChannel[src] ?? 0}</span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -544,6 +569,7 @@ function TicketsView({ tickets, isLoading, onSelect }: { tickets: Ticket[]; isLo
               <thead>
                 <tr>
                   <th>Subject</th>
+                  <th>Channel</th>
                   <th>Status</th>
                   <th>Priority</th>
                   <th>Category</th>
@@ -559,6 +585,7 @@ function TicketsView({ tickets, isLoading, onSelect }: { tickets: Ticket[]; isLo
                       <div className="truncate" style={{ maxWidth: 220 }}>{t.subject}</div>
                       {t.sentiment && t.sentiment !== 'neutral' && <div className="mt-4"><SentimentBadge sentiment={t.sentiment} /></div>}
                     </td>
+                    <td><ChannelBadge source={t.source} /></td>
                     <td><StatusBadge status={t.status} /></td>
                     <td><PriorityBadge priority={t.priority} /></td>
                     <td><CategoryBadge category={t.category} /></td>

@@ -1,0 +1,8 @@
+{
+  "name": "ticket-insert-pipeline",
+  "schedule_type": "DATASTORE",
+  "config": { "table_name": "tickets", "operations": ["INSERT"] },
+  "workflow_name": "ticket-pipeline",
+  "is_active": true,
+  "visibility": "POD"
+}

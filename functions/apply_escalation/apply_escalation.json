@@ -1,0 +1,11 @@
+{
+  "name": "apply_escalation",
+  "description": "Deterministically applies the escalation-agent's routing decision: auto_send promotes the draft to final_response and marks approved+auto_sent; otherwise sets status=pending_review for the dashboard queue.",
+  "type": "API",
+  "visibility": "POD",
+  "code": { "$file": "code.py" },
+  "permissions": { "grants": [
+    { "resource_type": "datastore_table", "resource_name": "tickets",
+      "permission_ids": ["datastore.table.read", "datastore.record.read", "datastore.record.write"] }
+  ] }
+}

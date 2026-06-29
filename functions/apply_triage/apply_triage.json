@@ -1,0 +1,13 @@
+{
+  "name": "apply_triage",
+  "description": "Deterministically writes the triage-agent's classification (category/priority/sentiment, status=triaged) onto the ticket and upserts the customer record.",
+  "type": "API",
+  "visibility": "POD",
+  "code": { "$file": "code.py" },
+  "permissions": { "grants": [
+    { "resource_type": "datastore_table", "resource_name": "tickets",
+      "permission_ids": ["datastore.table.read", "datastore.record.read", "datastore.record.write"] },
+    { "resource_type": "datastore_table", "resource_name": "customers",
+      "permission_ids": ["datastore.table.read", "datastore.record.read", "datastore.record.write"] }
+  ] }
+}

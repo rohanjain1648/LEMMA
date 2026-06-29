@@ -254,6 +254,8 @@ tbody td {
 .badge-neutral   { background: #f8fafc; color: #475569; }
 .badge-positive  { background: #dcfce7; color: #166534; }
 
+.badge-channel   { background: #eef2ff; color: #3730a3; border: 1px solid #e0e7ff; }
+
 .confidence-high { color: var(--success); }
 .confidence-mid  { color: var(--warn); }
 .confidence-low  { color: var(--danger); }

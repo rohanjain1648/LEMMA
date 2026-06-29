@@ -1,0 +1,68 @@
+{
+  "name": "ticket-pipeline",
+  "description": "Autonomous processing for every new ticket from ANY channel (web form, API, Slack, Gmail). Fires on ticket INSERT. Agents judge (read-only); deterministic functions persist each result, so writes never depend on LLM tool-calling.",
+  "start": { "type": "DATASTORE_EVENT", "config": { "table_name": "tickets", "operations": ["INSERT"] } },
+  "nodes": [
+    // The triggering ticket's id is at start.metadata.record_id (NOT start.payload).
+    { "id": "triage", "type": "AGENT", "label": "Triage (classify)",
+      "config": {
+        "agent_name": "triage-agent",
+        "input_mapping": {
+          "ticket_id": { "type": "expression", "value": "start.metadata.record_id" }
+        } } },
+
+    { "id": "apply-triage", "type": "FUNCTION", "label": "Persist classification",
+      "config": {
+        "function_name": "apply_triage",
+        "input_mapping": {
+          "ticket_id":     { "type": "expression", "value": "start.metadata.record_id" },
+          "category":      { "type": "expression", "value": "triage.category" },
+          "priority":      { "type": "expression", "value": "triage.priority" },
+          "sentiment":     { "type": "expression", "value": "triage.sentiment" },
+          "customer_name": { "type": "expression", "value": "triage.customer_name", "optional": true }
+        } } },
+
+    { "id": "draft", "type": "AGENT", "label": "Draft (grounded)",
+      "config": {
+        "agent_name": "draft-agent",
+        "input_mapping": {
+          "ticket_id": { "type": "expression", "value": "start.metadata.record_id" }
+        } } },
+
+    { "id": "apply-draft", "type": "FUNCTION", "label": "Persist draft",
+      "config": {
+        "function_name": "apply_draft",
+        "input_mapping": {
+          "ticket_id":        { "type": "expression", "value": "start.metadata.record_id" },
+          "draft_response":   { "type": "expression", "value": "draft.draft_response" },
+          "confidence_score": { "type": "expression", "value": "draft.confidence_score" },
+          "kb_titles":        { "type": "expression", "value": "draft.kb_titles", "optional": true }
+        } } },
+
+    { "id": "escalate", "type": "AGENT", "label": "Escalation decision",
+      "config": {
+        "agent_name": "escalation-agent",
+        "input_mapping": {
+          "ticket_id": { "type": "expression", "value": "start.metadata.record_id" }
+        } } },
+
+    { "id": "apply-escalation", "type": "FUNCTION", "label": "Apply routing",
+      "config": {
+        "function_name": "apply_escalation",
+        "input_mapping": {
+          "ticket_id": { "type": "expression", "value": "start.metadata.record_id" },
+          "decision":  { "type": "expression", "value": "escalate.decision" }
+        } } },
+
+    { "id": "end", "type": "END", "label": "Done" }
+  ],
+  "edges": [
+    { "id": "e1", "source": "triage",          "target": "apply-triage" },
+    { "id": "e2", "source": "apply-triage",     "target": "draft" },
+    { "id": "e3", "source": "draft",            "target": "apply-draft" },
+    { "id": "e4", "source": "apply-draft",      "target": "escalate" },
+    { "id": "e5", "source": "escalate",         "target": "apply-escalation" },
+    { "id": "e6", "source": "apply-escalation", "target": "end" }
+  ],
+  "visibility": "POD"
+}

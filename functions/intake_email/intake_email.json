@@ -1,0 +1,11 @@
+{
+  "name": "intake_email",
+  "description": "Silently converts an inbound support email (sender/subject/body from the Gmail new-message trigger) into a ticket with source=email. Sends no reply — the pipeline drafts it for human review.",
+  "type": "API",
+  "visibility": "POD",
+  "code": { "$file": "code.py" },
+  "permissions": { "grants": [
+    { "resource_type": "datastore_table", "resource_name": "tickets",
+      "permission_ids": ["datastore.table.read", "datastore.record.read", "datastore.record.write"] }
+  ] }
+}
