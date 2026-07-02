@@ -354,17 +354,6 @@ This is a complete, production-grade example of building agentic products on mod
 
 ---
 
-## 🎬 Demo Video
-
-[7-minute walkthrough](https://ops-app.apps.lemma.work):
-1. Landing page (3D hero, reveal-on-scroll)
-2. Multi-channel intake (email + Slack → dashboard in seconds)
-3. Autonomous pipeline (triage → draft → escalate)
-4. Human approval (review, edit, send)
-5. Knowledge base & daily digest
-
----
-
 ## 🛠️ Built With
 
 - [Lemma SDK](https://lemma.work) — AI-native workspace (agents, functions, workflows, schedules, surfaces)
