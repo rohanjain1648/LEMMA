@@ -1,0 +1,13 @@
+{
+  "name": "send_reply",
+  "description": "Sends the approved reply to the customer via the Gmail connector, then marks the ticket sent. Invoked ONLY from the dashboard 'Approve & Send' action (human-in-the-loop) — never automatically. Idempotent.",
+  "type": "API",
+  "visibility": "POD",
+  "code": { "$file": "code.py" },
+  "permissions": { "grants": [
+    { "resource_type": "datastore_table", "resource_name": "tickets",
+      "permission_ids": ["datastore.table.read", "datastore.record.read", "datastore.record.write"] },
+    { "resource_type": "connector", "resource_name": "gmail",
+      "permission_ids": ["connector.use"] }
+  ] }
+}

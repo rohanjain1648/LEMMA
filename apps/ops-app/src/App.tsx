@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   useCurrentUser,
   useLiveRecords,
   useRecords,
   useCreateRecord,
   useUpdateRecord,
+  useFunctionRun,
   useFiles,
   useFilePreview,
 } from 'lemma-sdk/react'
@@ -27,6 +28,8 @@ import {
   Zap,
   FileText,
   TrendingUp,
+  Moon,
+  Sun,
 } from 'lucide-react'
 import { lemmaClient } from './lemma-client'
 
@@ -112,6 +115,61 @@ function ConfidencePill({ score }: { score?: number }) {
   const pct = Math.round(score * 100)
   const cls = score >= 0.85 ? 'confidence-high' : score >= 0.7 ? 'confidence-mid' : 'confidence-low'
   return <span className={`text-sm font-mono ${cls}`}>{pct}%</span>
+}
+
+function confidenceColor(score: number) {
+  return score >= 0.85 ? 'var(--success)' : score >= 0.7 ? 'var(--warn)' : 'var(--danger)'
+}
+
+// Circular gauge for the ticket detail — a richer read than a flat %.
+function ConfidenceRing({ score, size = 88 }: { score?: number; size?: number }) {
+  if (score == null) return null
+  const pct = Math.round(score * 100)
+  const stroke = 8
+  const r = (size - stroke) / 2
+  const circ = 2 * Math.PI * r
+  const offset = circ * (1 - Math.max(0, Math.min(1, score)))
+  const color = confidenceColor(score)
+  const label = score >= 0.85 ? 'High' : score >= 0.7 ? 'Medium' : 'Low'
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+      <div style={{ position: 'relative', width: size, height: size }}>
+        <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line)" strokeWidth={stroke} />
+          <circle
+            cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+            strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset}
+            style={{ transition: 'stroke-dashoffset 0.7s cubic-bezier(0.4,0,0.2,1)' }}
+          />
+        </svg>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontSize: size * 0.28, fontWeight: 800, color, lineHeight: 1, letterSpacing: '-0.03em' }}>{pct}</span>
+          <span style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 600 }}>percent</span>
+        </div>
+      </div>
+      <span className="badge" style={{ background: 'transparent', color, boxShadow: `inset 0 0 0 1px ${color}` }}>{label} confidence</span>
+    </div>
+  )
+}
+
+// Shimmer skeleton primitives (used in place of full-screen spinners).
+function Skeleton({ w = '100%', h = 14, r = 6, style }: { w?: number | string; h?: number; r?: number; style?: React.CSSProperties }) {
+  return <div className="skeleton" style={{ width: w, height: h, borderRadius: r, ...style }} />
+}
+
+function SkeletonTable({ rows = 6, cols = 7 }: { rows?: number; cols?: number }) {
+  return (
+    <div className="panel" style={{ padding: 0 }}>
+      <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--line)', display: 'flex', gap: 20 }}>
+        {Array.from({ length: cols }).map((_, i) => <Skeleton key={i} w={i === 0 ? 160 : 70} h={10} />)}
+      </div>
+      {Array.from({ length: rows }).map((_, r) => (
+        <div key={r} style={{ padding: '15px 16px', borderBottom: '1px solid var(--line)', display: 'flex', gap: 20, alignItems: 'center' }}>
+          {Array.from({ length: cols }).map((_, i) => <Skeleton key={i} w={i === 0 ? 200 : 60} h={12} />)}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 const CHANNELS: Record<string, { label: string; icon: string }> = {
@@ -233,6 +291,7 @@ function TicketDetail({ ticket, onBack }: { ticket: Ticket; onBack: () => void }
   const [draftText, setDraftText] = useState(ticket.draft_response ?? '')
   const [success, setSuccess] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [sending, setSending] = useState(false)
 
   const { update: updateTicket, isSubmitting } = useUpdateRecord<Ticket>({
     client: lemmaClient,
@@ -242,10 +301,25 @@ function TicketDetail({ ticket, onBack }: { ticket: Ticket; onBack: () => void }
     onError: (e) => setError(e instanceof Error ? e.message : String(e)),
   })
 
+  const { start: runSendReply } = useFunctionRun({ client: lemmaClient, functionName: 'send_reply' })
+
+  // Approve & Send: human-in-the-loop. Calls the send_reply function, which emails the
+  // customer via the Gmail connector and marks the ticket sent. Never fires automatically.
   async function approve() {
     setError(null)
-    const r = await updateTicket({ status: 'approved', final_response: draftText || ticket.draft_response })
-    if (r) setSuccess('Ticket approved — queued for sending')
+    setSending(true)
+    try {
+      const body = draftText || ticket.draft_response || ''
+      const run = await runSendReply({ ticket_id: ticket.id, body_override: body })
+      const out = (run?.output_data ?? {}) as { ok?: boolean; sent?: boolean; reason?: string }
+      if (out.sent) setSuccess(`✓ Reply sent to ${ticket.customer_email}`)
+      else if (out.ok) setSuccess(out.reason ? `Note: ${out.reason}` : 'Processed')
+      else setError(out.reason || 'Send failed — check the Gmail connection')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSending(false)
+    }
   }
 
   async function saveDraft() {
@@ -260,6 +334,8 @@ function TicketDetail({ ticket, onBack }: { ticket: Ticket; onBack: () => void }
   }
 
   const needsReview = ticket.status === 'pending_review' || ticket.status === 'draft_ready'
+  const autoApproved = ticket.status === 'approved'
+  const canSend = !!(ticket.draft_response || ticket.final_response) && !['sent', 'resolved', 'closed'].includes(ticket.status)
 
   return (
     <div>
@@ -303,13 +379,8 @@ function TicketDetail({ ticket, onBack }: { ticket: Ticket; onBack: () => void }
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <SendHorizonal size={14} />
                     {ticket.final_response ? 'Sent Response' : 'AI Draft'}
-                    {ticket.confidence_score != null && (
-                      <span style={{ fontWeight: 400, color: 'var(--muted)', fontSize: 12 }}>
-                        confidence: <ConfidencePill score={ticket.confidence_score} />
-                      </span>
-                    )}
                   </div>
-                  {!ticket.final_response && needsReview && (
+                  {!ticket.final_response && canSend && (
                     <button className="btn btn-ghost btn-sm" onClick={() => { setEditingDraft(!editingDraft); setDraftText(ticket.draft_response ?? '') }}>
                       <Edit3 size={13} /> {editingDraft ? 'Cancel edit' : 'Edit'}
                     </button>
@@ -337,23 +408,41 @@ function TicketDetail({ ticket, onBack }: { ticket: Ticket; onBack: () => void }
 
         {/* Right: actions + metadata */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {needsReview && (
-            <div className="panel" style={{ background: 'var(--accent-soft)', borderColor: '#bfdbfe' }}>
-              <div className="section-head-title" style={{ marginBottom: 12, color: 'var(--accent)' }}>
-                <AlertCircle size={15} /> Review Required
+          {ticket.confidence_score != null && (
+            <div className="panel" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <div className="section-head-title" style={{ marginBottom: 8, alignSelf: 'flex-start' }}>
+                <TrendingUp size={15} /> AI Confidence
               </div>
-              <p className="text-sm" style={{ margin: '0 0 12px', color: '#374151' }}>
-                {ticket.confidence_score != null && ticket.confidence_score < 0.85
-                  ? `AI confidence is ${Math.round((ticket.confidence_score ?? 0) * 100)}% — review the draft before sending.`
-                  : 'This ticket was routed for manual review.'}
+              <ConfidenceRing score={ticket.confidence_score} />
+              <p className="text-xs text-muted" style={{ margin: '4px 0 0', textAlign: 'center' }}>
+                How fully the knowledge base covered this ticket
+              </p>
+            </div>
+          )}
+
+          {canSend && (
+            <div className="panel" style={{ background: 'var(--accent-soft)', borderColor: 'var(--line)' }}>
+              <div className="section-head-title" style={{ marginBottom: 12, color: 'var(--accent)' }}>
+                <AlertCircle size={15} /> {autoApproved ? 'AI-Approved — Ready to Send' : 'Review Required'}
+              </div>
+              <p className="text-sm" style={{ margin: '0 0 12px', color: 'var(--ink-soft)' }}>
+                {autoApproved
+                  ? 'The AI is confident in this reply and cleared it to send. Nothing goes out until you click Send.'
+                  : ticket.confidence_score != null && ticket.confidence_score < 0.85
+                    ? `AI confidence is ${Math.round((ticket.confidence_score ?? 0) * 100)}% — review the draft before sending.`
+                    : 'This ticket was routed for manual review.'}
               </p>
               <div className="action-bar" style={{ flexDirection: 'column' }}>
-                <button className="btn btn-success" onClick={approve} disabled={isSubmitting}>
-                  <CheckCircle size={15} /> Approve & Send
+                <button className="btn btn-success" onClick={approve} disabled={sending || isSubmitting}>
+                  {sending
+                    ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Sending…</>
+                    : <><SendHorizonal size={15} /> Approve &amp; Send Email</>}
                 </button>
-                <button className="btn btn-outline" onClick={() => setEditingDraft(true)} disabled={isSubmitting}>
-                  <Edit3 size={15} /> Edit Draft First
-                </button>
+                {!editingDraft && (
+                  <button className="btn btn-outline" onClick={() => { setEditingDraft(true); setDraftText(ticket.draft_response ?? '') }} disabled={sending || isSubmitting}>
+                    <Edit3 size={15} /> Edit Draft First
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -430,22 +519,34 @@ function DashboardView({ tickets, setView }: { tickets: Ticket[]; setView: (v: V
     <div>
       <div className="metric-grid">
         <div className="metric-card">
-          <div className="metric-label">Open Tickets</div>
+          <div className="metric-head">
+            <div className="metric-label">Open Tickets</div>
+            <div className="metric-icon"><Ticket size={17} /></div>
+          </div>
           <div className="metric-value">{open}</div>
           <div className="metric-sub">Needs attention</div>
         </div>
         <div className={`metric-card ${pending > 0 ? 'danger' : ''}`}>
-          <div className="metric-label">Pending Review</div>
+          <div className="metric-head">
+            <div className="metric-label">Pending Review</div>
+            <div className="metric-icon"><Clock size={17} /></div>
+          </div>
           <div className="metric-value">{pending}</div>
           <div className="metric-sub">Awaiting your approval</div>
         </div>
         <div className="metric-card success">
-          <div className="metric-label">Auto-handled Today</div>
+          <div className="metric-head">
+            <div className="metric-label">Auto-handled Today</div>
+            <div className="metric-icon"><Zap size={17} /></div>
+          </div>
           <div className="metric-value">{sentToday}</div>
           <div className="metric-sub">Sent without review</div>
         </div>
         <div className="metric-card accent">
-          <div className="metric-label">Avg AI Confidence</div>
+          <div className="metric-head">
+            <div className="metric-label">Avg AI Confidence</div>
+            <div className="metric-icon"><TrendingUp size={17} /></div>
+          </div>
           <div className="metric-value">{avgConf > 0 ? `${Math.round(avgConf * 100)}%` : '—'}</div>
           <div className="metric-sub">Draft quality signal</div>
         </div>
@@ -543,7 +644,7 @@ function TicketsView({ tickets, isLoading, onSelect }: { tickets: Ticket[]; isLo
     { key: 'resolved', label: 'Resolved' },
   ]
 
-  if (isLoading) return <div className="loading-center"><div className="spinner" /></div>
+  if (isLoading) return <SkeletonTable rows={7} cols={8} />
 
   return (
     <div>
@@ -687,7 +788,7 @@ function KnowledgeBaseView() {
     await create({ ...form, tags: form.tags.split(',').map(s => s.trim()).filter(Boolean), is_active: true, usage_count: 0 })
   }
 
-  if (isLoading) return <div className="loading-center"><div className="spinner" /></div>
+  if (isLoading) return <SkeletonTable rows={5} cols={5} />
 
   return (
     <div>
@@ -778,7 +879,14 @@ function KnowledgeBaseView() {
 
 function ReportContent({ path }: { path: string }) {
   const { content, isLoading } = useFilePreview({ client: lemmaClient, path, mode: 'rendered' })
-  if (isLoading) return <div className="loading-center"><div className="spinner" /></div>
+  if (isLoading) return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Skeleton w={220} h={20} />
+      <Skeleton w="90%" /><Skeleton w="96%" /><Skeleton w="70%" />
+      <Skeleton w={160} h={16} style={{ marginTop: 10 }} />
+      <Skeleton w="88%" /><Skeleton w="93%" />
+    </div>
+  )
   return <div className="report-content">{content ?? 'Unable to load report content.'}</div>
 }
 
@@ -786,7 +894,16 @@ function ReportsView() {
   const { files, isLoading } = useFiles({ client: lemmaClient, directoryPath: '/reports' })
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
 
-  if (isLoading) return <div className="loading-center"><div className="spinner" /></div>
+  if (isLoading) return (
+    <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 20, alignItems: 'start' }}>
+      <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} h={16} />)}
+      </div>
+      <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Skeleton w={200} h={20} /><Skeleton w="92%" /><Skeleton w="85%" /><Skeleton w="95%" />
+      </div>
+    </div>
+  )
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 20, alignItems: 'start' }}>
@@ -836,6 +953,13 @@ export function App() {
   const [view, setView] = useState<View>('dashboard')
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [showNewTicket, setShowNewTicket] = useState(false)
+  const [theme, setTheme] = useState<'light' | 'dark'>(
+    () => (typeof localStorage !== 'undefined' && localStorage.getItem('sp-theme') === 'dark' ? 'dark' : 'light')
+  )
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    try { localStorage.setItem('sp-theme', theme) } catch { /* ignore */ }
+  }, [theme])
 
   const { records: tickets, isLoading, liveStatus, refresh } = useLiveRecords<Ticket>({
     client: lemmaClient,
@@ -907,12 +1031,20 @@ export function App() {
 
         <div className="sidebar-footer">
           <div className="user-avatar">{userInitial}</div>
-          <div style={{ overflow: 'hidden' }}>
+          <div style={{ overflow: 'hidden', flex: 1 }}>
             <div style={{ fontWeight: 500, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {displayName ?? 'Operator'}
             </div>
             <div className="text-xs" style={{ color: 'var(--muted)' }}>Support team</div>
           </div>
+          <button
+            className="theme-toggle"
+            onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
         </div>
       </aside>
 

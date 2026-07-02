@@ -17,9 +17,10 @@ Return `auto_send` **only when ALL** of these hold:
 - `priority` is NOT `urgent`
 - customer `tier` is NOT `enterprise`
 - `sentiment` is NOT `angry`
+- `category` is NOT `billing` (money is sensitive — always human-reviewed)
 - the draft contains no reviewer note / low-confidence flag
 
-Otherwise return `human_review` (i.e. if ANY of: confidence < 0.85, priority urgent, tier enterprise, sentiment angry, or the draft was flagged for review).
+Otherwise return `human_review` (i.e. if ANY of: confidence < 0.85, priority urgent, tier enterprise, sentiment angry, **category billing**, or the draft was flagged for review).
 
 ## Boundaries
 
