@@ -1,0 +1,13 @@
+{
+  "name": "resolve_kb_suggestion",
+  "description": "Operator decision on a suggested KB article from the Knowledge Gaps queue: approve publishes it as a real, active knowledge_base article; dismiss closes the suggestion. Called ONLY from the dashboard.",
+  "type": "API",
+  "visibility": "POD",
+  "code": { "$file": "code.py" },
+  "permissions": { "grants": [
+    { "resource_type": "datastore_table", "resource_name": "kb_suggestions",
+      "permission_ids": ["datastore.table.read", "datastore.record.read", "datastore.record.write"] },
+    { "resource_type": "datastore_table", "resource_name": "knowledge_base",
+      "permission_ids": ["datastore.table.read", "datastore.record.read", "datastore.record.write"] }
+  ] }
+}

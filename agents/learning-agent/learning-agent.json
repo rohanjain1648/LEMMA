@@ -1,0 +1,26 @@
+{
+  "name": "learning-agent",
+  "description": "Judges whether an operator's edit to an AI draft reveals a genuine knowledge base gap, and if so drafts a new KB article capturing the correction. Read-only; a deterministic function persists the suggestion.",
+  "instruction": { "$file": "instruction.md" },
+  "toolsets": ["POD"],
+  "visibility": "POD",
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "has_gap":  { "type": "boolean", "description": "True only if the correction reveals a genuine, reusable documentation gap." },
+      "title":    { "type": "string", "description": "Short, specific KB article title. Required if has_gap is true." },
+      "content":  { "type": "string", "description": "Standalone KB article body grounded in the operator's final_response. Required if has_gap is true." },
+      "category": { "type": "string", "enum": ["billing", "bug", "how_to", "feature_request", "account", "general"], "description": "Best-matching KB category. Required if has_gap is true." },
+      "reason":   { "type": "string", "description": "One sentence on what was missing or wrong, or why this isn't a gap." }
+    },
+    "required": ["has_gap", "reason"]
+  },
+  "permissions": { "grants": [
+    { "resource_type": "datastore_table", "resource_name": "kb_suggestions",
+      "permission_ids": ["datastore.table.read", "datastore.record.read"] },
+    { "resource_type": "datastore_table", "resource_name": "tickets",
+      "permission_ids": ["datastore.table.read", "datastore.record.read"] },
+    { "resource_type": "datastore_table", "resource_name": "knowledge_base",
+      "permission_ids": ["datastore.table.read", "datastore.record.read"] }
+  ] }
+}

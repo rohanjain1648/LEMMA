@@ -1,0 +1,8 @@
+{
+  "name": "kb-suggestion-pipeline",
+  "schedule_type": "DATASTORE",
+  "config": { "table_name": "kb_suggestions", "operations": ["INSERT"] },
+  "workflow_name": "learning-loop",
+  "is_active": true,
+  "visibility": "POD"
+}

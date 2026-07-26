@@ -1,0 +1,19 @@
+{
+  "name": "kb_suggestions",
+  "primary_key_column": "id",
+  "enable_rls": false,
+  "visibility": "POD",
+  "columns": [
+    { "name": "ticket_id",      "type": "UUID",  "required": true },
+    { "name": "status",         "type": "ENUM",  "required": true, "default": "analyzing",
+      "options": ["analyzing", "pending", "approved", "dismissed"] },
+    { "name": "title",          "type": "TEXT",  "required": false, "max_length": 300 },
+    { "name": "content",        "type": "TEXT",  "required": false },
+    { "name": "category",       "type": "ENUM",  "required": false,
+      "options": ["billing", "bug", "how_to", "feature_request", "account", "general"] },
+    { "name": "reason",         "type": "TEXT",  "required": false },
+    { "name": "original_draft", "type": "TEXT",  "required": false },
+    { "name": "final_response", "type": "TEXT",  "required": false }
+  ],
+  "config": {}
+}

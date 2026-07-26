@@ -30,6 +30,8 @@ import {
   TrendingUp,
   Moon,
   Sun,
+  Lightbulb,
+  Check,
 } from 'lucide-react'
 import { lemmaClient } from './lemma-client'
 
@@ -71,7 +73,20 @@ interface KBArticle extends Record<string, unknown> {
   created_at: string
 }
 
-type View = 'dashboard' | 'tickets' | 'pending' | 'knowledge' | 'reports'
+interface KBSuggestion extends Record<string, unknown> {
+  id: string
+  ticket_id: string
+  status: 'analyzing' | 'pending' | 'approved' | 'dismissed'
+  title?: string
+  content?: string
+  category?: string
+  reason?: string
+  original_draft?: string
+  final_response?: string
+  created_at: string
+}
+
+type View = 'dashboard' | 'tickets' | 'pending' | 'knowledge' | 'gaps' | 'reports'
 
 // ── Badge helpers ──────────────────────────────────────────────────────────
 
@@ -875,6 +890,98 @@ function KnowledgeBaseView() {
   )
 }
 
+// ── Knowledge Gaps view ────────────────────────────────────────────────────
+// Closed-loop learning: when an operator meaningfully rewrites an AI draft before
+// sending, learning-agent judges whether the correction reveals a genuine KB gap.
+// Real gaps land here as a ready-to-publish article suggestion — approve once,
+// and the draft-agent never has to be corrected on that topic again.
+
+function KnowledgeGapsView() {
+  const { records: suggestions, isLoading, refresh } = useRecords<KBSuggestion>({
+    client: lemmaClient,
+    tableName: 'kb_suggestions',
+    sort: [{ field: 'created_at', direction: 'desc' }],
+  })
+
+  const { start: runResolve } = useFunctionRun({ client: lemmaClient, functionName: 'resolve_kb_suggestion' })
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const pending = suggestions.filter(s => s.status === 'pending')
+  const analyzing = suggestions.filter(s => s.status === 'analyzing').length
+  const resolved = suggestions.filter(s => s.status === 'approved' || s.status === 'dismissed').length
+
+  async function resolve(id: string, action: 'approve' | 'dismiss') {
+    setBusyId(id)
+    setError(null)
+    try {
+      const run = await runResolve({ suggestion_id: id, action })
+      const out = (run?.output_data ?? {}) as { ok?: boolean }
+      if (!out.ok) setError('Could not resolve suggestion — try again.')
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  if (isLoading) return <SkeletonTable rows={4} cols={4} />
+
+  return (
+    <div>
+      <div className="text-muted text-sm" style={{ marginBottom: 16 }}>
+        Whenever an operator meaningfully edits an AI draft, learning-agent checks if the correction reveals a
+        documentation gap. Approve a suggestion to publish it as a real KB article instantly.
+        {(analyzing > 0 || resolved > 0) && (
+          <span> &nbsp;·&nbsp; {analyzing > 0 ? `${analyzing} being analyzed` : ''}{analyzing > 0 && resolved > 0 ? ' · ' : ''}{resolved > 0 ? `${resolved} resolved` : ''}</span>
+        )}
+      </div>
+
+      {error && <div className="alert" style={{ marginBottom: 16 }}>{error}</div>}
+
+      {pending.length === 0 ? (
+        <div className="empty-state">
+          <Lightbulb size={40} />
+          <h3>No open knowledge gaps</h3>
+          <p>Nothing to review right now — corrections are either cosmetic or already well documented.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {pending.map(s => (
+            <div key={s.id} className="panel" style={{ borderLeft: '4px solid var(--accent)' }}>
+              <div className="flex-between" style={{ alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 15 }}>{s.title}</div>
+                  <div className="gap-8">
+                    <CategoryBadge category={s.category as TicketCategory} />
+                    <span className="text-xs text-muted">{timeAgo(s.created_at)}</span>
+                  </div>
+                  {s.reason && <div className="text-sm" style={{ color: 'var(--ink-soft)' }}>{s.reason}</div>}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-outline btn-sm" disabled={busyId === s.id} onClick={() => resolve(s.id, 'dismiss')}>
+                    <X size={13} /> Dismiss
+                  </button>
+                  <button className="btn btn-success btn-sm" disabled={busyId === s.id} onClick={() => resolve(s.id, 'approve')}>
+                    <Check size={13} /> Approve &amp; Publish
+                  </button>
+                </div>
+              </div>
+              {s.content && (
+                <div style={{ marginTop: 10, padding: '10px 12px', background: 'var(--bg)', borderRadius: 8, fontSize: 13, color: 'var(--muted)', borderLeft: '3px solid var(--line)' }}>
+                  <div style={{ fontWeight: 600, fontSize: 11, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Suggested article</div>
+                  {s.content}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Reports view ───────────────────────────────────────────────────────────
 
 function ReportContent({ path }: { path: string }) {
@@ -968,7 +1075,15 @@ export function App() {
     reconcile: 'refetch',
   })
 
+  const { records: kbSuggestions } = useLiveRecords<KBSuggestion>({
+    client: lemmaClient,
+    tableName: 'kb_suggestions',
+    sort: [{ field: 'created_at', direction: 'desc' }],
+    reconcile: 'refetch',
+  })
+
   const pendingCount = tickets.filter(t => t.status === 'pending_review').length
+  const gapsCount = kbSuggestions.filter(s => s.status === 'pending').length
 
   function handleSelectTicket(t: Ticket) {
     setSelectedTicket(t)
@@ -980,6 +1095,7 @@ export function App() {
     { key: 'tickets' as View, label: 'All Tickets', icon: <Ticket size={16} /> },
     { key: 'pending' as View, label: 'Pending Review', icon: <Clock size={16} />, badge: pendingCount },
     { key: 'knowledge' as View, label: 'Knowledge Base', icon: <BookOpen size={16} /> },
+    { key: 'gaps' as View, label: 'Knowledge Gaps', icon: <Lightbulb size={16} />, badge: gapsCount },
     { key: 'reports' as View, label: 'Analytics', icon: <BarChart2 size={16} /> },
   ]
 
@@ -988,6 +1104,7 @@ export function App() {
     tickets: { title: 'Tickets', subtitle: `${tickets.length} total · live ${liveStatus === 'open' ? '🟢' : '🔴'}` },
     pending: { title: 'Pending Review', subtitle: `${pendingCount} ticket${pendingCount !== 1 ? 's' : ''} need your attention` },
     knowledge: { title: 'Knowledge Base', subtitle: 'Articles used by AI agents to ground responses' },
+    gaps: { title: 'Knowledge Gaps', subtitle: 'AI-suggested KB articles learned from your corrections' },
     reports: { title: 'Analytics', subtitle: 'Daily digest reports from analytics-agent' },
   }
 
@@ -1071,6 +1188,7 @@ export function App() {
               {view === 'tickets' && <TicketsView tickets={tickets} isLoading={isLoading} onSelect={handleSelectTicket} />}
               {view === 'pending' && <PendingReviewView tickets={tickets} onSelect={handleSelectTicket} />}
               {view === 'knowledge' && <KnowledgeBaseView />}
+              {view === 'gaps' && <KnowledgeGapsView />}
               {view === 'reports' && <ReportsView />}
             </>
           )}

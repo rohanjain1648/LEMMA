@@ -1,0 +1,11 @@
+{
+  "name": "apply_kb_suggestion",
+  "description": "Deterministically persists the learning-agent's judgment onto a kb_suggestions row: real gaps move to status=pending for operator review; everything else is auto-dismissed.",
+  "type": "API",
+  "visibility": "POD",
+  "code": { "$file": "code.py" },
+  "permissions": { "grants": [
+    { "resource_type": "datastore_table", "resource_name": "kb_suggestions",
+      "permission_ids": ["datastore.table.read", "datastore.record.read", "datastore.record.write"] }
+  ] }
+}

@@ -2,6 +2,8 @@
 #output_type_name: SendReplyResult
 #function_name: send_reply
 
+import re
+from difflib import SequenceMatcher
 from typing import Optional
 from pydantic import BaseModel
 from lemma_sdk import FunctionContext, Pod
@@ -10,6 +12,14 @@ from lemma_sdk import FunctionContext, Pod
 # means the reply always goes out FROM the support inbox, whoever approves it.
 SUPPORT_GMAIL_ACCOUNT_ID = "019f1c17-f349-7082-b117-dcfcd103cadb"
 GMAIL_AUTH_CONFIG = "supportpilot-gmail"
+
+# Below this similarity ratio, an edit is "meaningful" enough to check for a KB gap
+# rather than a cosmetic tone/grammar tweak.
+EDIT_SIMILARITY_THRESHOLD = 0.90
+
+
+def _normalize(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip().lower()
 
 
 class SendReplyInput(BaseModel):
@@ -55,4 +65,22 @@ async def send_reply(ctx: FunctionContext, data: SendReplyInput) -> SendReplyRes
         "status": "sent",
         "final_response": body,
     })
+
+    # Closed-loop learning: if the operator meaningfully rewrote the AI draft, queue it
+    # for learning-agent to judge whether the correction reveals a genuine KB gap.
+    original_draft = (ticket.get("draft_response") or "").strip()
+    if original_draft and body:
+        similarity = SequenceMatcher(None, _normalize(original_draft), _normalize(body)).ratio()
+        if similarity < EDIT_SIMILARITY_THRESHOLD:
+            try:
+                pod.table("kb_suggestions").create({
+                    "ticket_id": data.ticket_id,
+                    "status": "analyzing",
+                    "original_draft": original_draft,
+                    "final_response": body,
+                })
+            except Exception:
+                # Learning is best-effort; never fail the send over it.
+                pass
+
     return SendReplyResult(ok=True, sent=True, reason=f"sent to {to_email}")

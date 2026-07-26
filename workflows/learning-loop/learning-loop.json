@@ -1,0 +1,32 @@
+{
+  "name": "learning-loop",
+  "description": "Closed-loop learning: fires when send_reply logs a meaningfully-edited reply. learning-agent judges whether the correction reveals a genuine KB gap; apply_kb_suggestion persists the verdict for the operator's Knowledge Gaps queue.",
+  "start": { "type": "DATASTORE_EVENT", "config": { "table_name": "kb_suggestions", "operations": ["INSERT"] } },
+  "nodes": [
+    { "id": "learn", "type": "AGENT", "label": "Judge knowledge gap",
+      "config": {
+        "agent_name": "learning-agent",
+        "input_mapping": {
+          "suggestion_id": { "type": "expression", "value": "start.metadata.record_id" }
+        } } },
+
+    { "id": "apply-suggestion", "type": "FUNCTION", "label": "Persist verdict",
+      "config": {
+        "function_name": "apply_kb_suggestion",
+        "input_mapping": {
+          "suggestion_id": { "type": "expression", "value": "start.metadata.record_id" },
+          "has_gap":       { "type": "expression", "value": "learn.has_gap" },
+          "title":         { "type": "expression", "value": "learn.title", "optional": true },
+          "content":       { "type": "expression", "value": "learn.content", "optional": true },
+          "category":      { "type": "expression", "value": "learn.category", "optional": true },
+          "reason":        { "type": "expression", "value": "learn.reason", "optional": true }
+        } } },
+
+    { "id": "end", "type": "END", "label": "Done" }
+  ],
+  "edges": [
+    { "id": "e1", "source": "learn",            "target": "apply-suggestion" },
+    { "id": "e2", "source": "apply-suggestion",  "target": "end" }
+  ],
+  "visibility": "POD"
+}
